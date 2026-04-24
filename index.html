@@ -19,7 +19,7 @@
        === 间距系统：4 / 8 / 12 / 16 / 24 === */
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, "PingFang SC", sans-serif; background: #ecebe4; color: #222; font-size: 15px; font-weight: 400; }
-    #app { max-width: 480px; margin: 0 auto; padding: 12px; min-height: 100vh; }
+    #app { max-width: 480px; margin: 0 auto; padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px) + 20px); min-height: 100vh; }
     h1 { font-size: 20px; font-weight: 700; margin: 0 0 12px; }
     h2 { font-size: 17px; font-weight: 700; margin: 0 0 12px; }
     button { font-size: 15px; font-weight: 500; min-height: 40px; padding: 8px 10px; border: 1px solid #d0d0c8; border-radius: 8px; background: #fff; color: #333; cursor: pointer; transition: background 0.15s, transform 0.05s; }
@@ -255,8 +255,8 @@
     .sp-recv { color: #2a8; font-weight: 500; }
     .sp-pay { color: #c66; font-weight: 500; }
     /* Footer */
-    .footer-buttons { display: flex; gap: 8px; margin-top: 16px; }
-    .footer-buttons button { flex: 1; min-height: 44px; }
+    .footer-buttons { display: flex; gap: 8px; margin-top: 16px; margin-bottom: 8px; }
+    .footer-buttons button { flex: 1; min-height: 48px; }
     #btn-reset-round { background: #fff; color: #888; border-color: #d0d0c8; flex: 0.8; font-size: 13px; }
   </style>
 </head>
