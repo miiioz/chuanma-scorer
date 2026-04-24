@@ -1,5 +1,5 @@
 // 川麻记分 Service Worker — 离线缓存
-const CACHE_NAME = 'chuanma-v5';
+const CACHE_NAME = 'chuanma-v23';
 const ASSETS = [
   './',
   './index.html',
@@ -8,7 +8,12 @@ const ASSETS = [
   './engine.mjs',
   './state.mjs',
   './manifest.json',
-  './icon.svg'
+  './icon-192.png',
+  './icon-512.png',
+  './sakura-bg.png',
+  './panda-head.png',
+  './tile-zhong.png',
+  './tile-fa.png'
 ];
 
 self.addEventListener('install', (e) => {

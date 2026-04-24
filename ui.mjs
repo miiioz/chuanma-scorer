@@ -47,6 +47,17 @@ function escapeHtml(s) {
   return s.replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 }
 
+// Toast 简短反馈
+let toastTimer = null;
+function toast(msg, type = "success") {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `show toast-${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ""; }, 1800);
+}
+
 function resetAction() {
   actionMode = null;
   actionPlayer = null;
@@ -94,14 +105,23 @@ $("#wizard-start").addEventListener("click", () => {
 function renderMain() {
   const rule = RULES[state.rule];
   const undoBtn = undoStack.length > 0
-    ? `<button class="info-icon-btn" data-xact="undo" title="撤销 ${undoStack[undoStack.length-1].label}">↶</button>`
+    ? `<button class="info-icon-btn" data-xact="undo" title="撤销"><span>↶</span><span class="label">撤销</span></button>`
     : "";
   $("#info-bar").innerHTML =
-    `<span class="info-text">第 ${state.rounds.length + 1} 局 · ${rule.name} · 底分 ${state.baseScore}</span>` +
+    `<div class="info-hero">
+       <img class="info-panda" src="panda-head.png" alt="panda">
+       <img class="info-tile" src="tile-zhong.png" alt="tile">
+     </div>
+     <div class="info-text">
+       <div class="info-title">第 ${state.rounds.length + 1} 局</div>
+       <div class="info-sub">${rule.name} · 底分 ${state.baseScore}</div>
+     </div>
+     <div class="info-actions">` +
     undoBtn +
-    `<button class="info-icon-btn ${reorderMode ? 'active' : ''}" data-xact="reorder-toggle" title="事件顺序">⏱</button>` +
-    `<button class="info-icon-btn ${historyMode ? 'active' : ''}" data-xact="history-toggle" title="历史">📜</button>` +
-    `<button class="info-icon-btn ${helpMode ? 'active' : ''}" data-xact="help-toggle" title="玩法指引">❓</button>`;
+    `<button class="info-icon-btn ${historyMode ? 'active' : ''}" data-xact="history-toggle"><span>📜</span><span class="label">历史</span></button>` +
+    `<button class="info-icon-btn ${reorderMode ? 'active' : ''}" data-xact="reorder-toggle"><span>⏱</span><span class="label">顺序</span></button>` +
+    `<button class="info-icon-btn ${helpMode ? 'active' : ''}" data-xact="help-toggle"><span>❓</span><span class="label">帮助</span></button>` +
+    `</div>`;
   if (helpMode) {
     $("#dice-area").innerHTML = "";
     $("#action-panel").innerHTML = "";
@@ -123,9 +143,18 @@ function renderMain() {
   $("#dice-area").innerHTML = renderDiceTool();
   $("#action-panel").innerHTML = settlingMode ? renderSettlementPanel() : renderActionPanel();
   const scores = currentRoundScores(state);
-  $("#player-list").innerHTML = state.players
+  const hasEvents = state.currentRound.events.length > 0;
+  const emptyHint = (!hasEvents && !settlingMode)
+    ? `<div class="empty-hint">↑ 点击上面按钮记录杠 / 胡</div>`
+    : "";
+  $("#player-list").innerHTML = emptyHint + state.players
     .map((name, i) => renderPlayerCard(i, name, scores[i]))
     .join("");
+  // 下一局无事件时禁用
+  const endBtn = $("#btn-end-round");
+  if (endBtn) endBtn.disabled = !hasEvents;
+  const resetBtn = $("#btn-reset-round");
+  if (resetBtn) resetBtn.disabled = !hasEvents;
 }
 
 // 历史页单条事件描述（含当时的玩家名、番数、分数）
@@ -684,7 +713,10 @@ function renderPlayerCard(i, name, score) {
   const eventsHtml = renderCardEvents(i);
   return `<div class="player-card">
     <div class="card-top">
-      <span class="pname" data-pname="${i}">${escapeHtml(name)}</span>
+      <div class="pname-wrap">
+        <span class="player-badge">${i + 1}</span>
+        <span class="pname" data-pname="${i}">${escapeHtml(name)}</span>
+      </div>
       <span class="pscore ${cls}">${scoreStr}</span>
     </div>
     ${txnsHtml}
@@ -904,8 +936,10 @@ function handleExpansionButton(xact, btn) {
     const pi = Number(btn.dataset.pi);
     if (role === "gang-player") {
       // 补/直/暗杠：选完玩家即记录
+      const labels = { bu: "补杠", zhi: "直杠", an: "暗杠" };
       state = addEvent(state, { type: "gang", player: pi, gangType: actionMode, from: null });
       saveState(state);
+      toast(`${state.players[pi]} ${labels[actionMode]}`);
       resetAction();
       renderMain();
       return;
@@ -926,6 +960,7 @@ function handleExpansionButton(xact, btn) {
       if (!confirm(`${state.players[pi]} 麻胡，将赔 3 家共 ${RULES[state.rule].penalty * state.baseScore * 3} 元。确认？`)) return;
       state = addEvent(state, { type: "mahu", player: pi });
       saveState(state);
+      toast(`${state.players[pi]} 麻胡`, "warn");
       resetAction();
       renderMain();
       return;
@@ -947,6 +982,7 @@ function handleExpansionButton(xact, btn) {
     if (actionPlayer === null || gangDianFrom === null || actionPlayer === gangDianFrom) return;
     state = addEvent(state, { type: "gang", player: actionPlayer, gangType: "dian", from: gangDianFrom });
     saveState(state);
+    toast(`${state.players[actionPlayer]} 点杠（${state.players[gangDianFrom]}点）`);
     resetAction();
     renderMain();
     return;
@@ -958,6 +994,8 @@ function handleExpansionButton(xact, btn) {
   }
   if (xact === "hu-confirm") {
     if (!isHuValid(actionPlayer)) return;
+    const playerIdx = actionPlayer;
+    const way = huSel.zimo ? "自摸" : "点炮";
     state = addEvent(state, {
       type: "hu",
       player: actionPlayer,
@@ -968,8 +1006,21 @@ function handleExpansionButton(xact, btn) {
       bonuses: [...huSel.bonuses]
     });
     saveState(state);
+    toast(`${state.players[playerIdx]} 胡 ${way}`);
     resetAction();
     renderMain();
+    // 3 胡自动提示结算（血战到底 3 家胡即终局）
+    const huSet = huSetFromEvents(state.currentRound.events);
+    if (huSet.size === 3) {
+      setTimeout(() => {
+        if (confirm("已 3 家胡，开始流局结算？\n（取消则继续录入，可以补录后面的杠）")) {
+          settleSel = state.players.map(() => ({ status: "tingpai", maxFan: 0 }));
+          settlingMode = true;
+          resetAction();
+          renderMain();
+        }
+      }, 300);
+    }
     return;
   }
   if (xact === "toggle-more") {
@@ -1222,10 +1273,7 @@ $("#btn-new-session").addEventListener("click", () => {
 });
 
 $("#btn-reset-round").addEventListener("click", () => {
-  if (state.currentRound.events.length === 0) {
-    alert("本局还没有事件，无需重置。");
-    return;
-  }
+  if (state.currentRound.events.length === 0) return;
   if (!confirm("清空本局全部事件，重新开始录入？（往局历史和玩家名保留）")) return;
   pushUndo("重置本局");
   state = { ...state, currentRound: { events: [] } };
@@ -1238,10 +1286,7 @@ $("#btn-reset-round").addEventListener("click", () => {
 });
 
 $("#btn-end-round").addEventListener("click", () => debounced("end-round", () => {
-  if (state.currentRound.events.length === 0) {
-    alert("本局还没有任何事件，不能进下一局。");
-    return;
-  }
+  if (state.currentRound.events.length === 0) return;
   const huSet = huSetFromEvents(state.currentRound.events);
   if (huSet.size >= 4) {
     pushUndo("下一局");
