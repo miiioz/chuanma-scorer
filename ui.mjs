@@ -15,6 +15,25 @@ let diceRoll = null;           // 换三张摇骰子结果：点数合计 (2..12
 let historyMode = false;       // 切换历史视图
 let reorderMode = false;       // 事件顺序编辑视图
 let helpMode = false;          // 玩法指引浮层
+let undoStack = [];            // 最近 10 个 state 快照，供撤销使用
+const UNDO_LIMIT = 10;
+
+// 按钮防抖
+const debounceTs = {};
+function debounced(key, fn, ms = 500) {
+  const now = Date.now();
+  if (debounceTs[key] && now - debounceTs[key] < ms) return;
+  debounceTs[key] = now;
+  fn();
+}
+
+function pushUndo(label) {
+  undoStack.push({ state: JSON.parse(JSON.stringify(state)), label });
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+}
+function popUndo() {
+  return undoStack.pop();
+}
 
 function defaultHuSel() {
   return { zimo: false, from: null, pattern: "pinghu", gen: 0, bonuses: [] };
@@ -74,8 +93,12 @@ $("#wizard-start").addEventListener("click", () => {
 // ---------- 主屏渲染 ----------
 function renderMain() {
   const rule = RULES[state.rule];
+  const undoBtn = undoStack.length > 0
+    ? `<button class="info-icon-btn" data-xact="undo" title="撤销 ${undoStack[undoStack.length-1].label}">↶</button>`
+    : "";
   $("#info-bar").innerHTML =
     `<span class="info-text">第 ${state.rounds.length + 1} 局 · ${rule.name} · 底分 ${state.baseScore}</span>` +
+    undoBtn +
     `<button class="info-icon-btn ${reorderMode ? 'active' : ''}" data-xact="reorder-toggle" title="事件顺序">⏱</button>` +
     `<button class="info-icon-btn ${historyMode ? 'active' : ''}" data-xact="history-toggle" title="历史">📜</button>` +
     `<button class="info-icon-btn ${helpMode ? 'active' : ''}" data-xact="help-toggle" title="玩法指引">❓</button>`;
@@ -225,15 +248,19 @@ function renderReorderView() {
     } else if (ev.type === "mahu") {
       desc = `<b>${p[ev.player]}</b> ⚠️ 麻胡 赔 3 家`;
     }
+    const upDis = idx === 0 ? "disabled" : "";
+    const downDis = idx === events.length - 1 ? "disabled" : "";
     return `<div class="reorder-row" data-idx="${idx}">
       <span class="reorder-handle" data-drag="${idx}">⋮⋮</span>
       <span class="reorder-idx">${idx + 1}.</span>
       <span class="reorder-desc">${desc}</span>
+      <button data-xact="move-up" data-idx="${idx}" ${upDis}>↑</button>
+      <button data-xact="move-down" data-idx="${idx}" ${downDis}>↓</button>
       <button data-xact="remove-event" data-idx="${idx}" class="reorder-del">✕</button>
     </div>`;
   }).join("");
   return `<div class="reorder-view">
-    <div class="reorder-hint">按实际发生顺序调整。<b>长按左侧 ⋮⋮ 拖动</b>排序，✕ 删除。</div>
+    <div class="reorder-hint">按实际发生顺序调整。<b>拖 ⋮⋮</b> 或点 <b>↑↓</b> 移动，✕ 删除。</div>
     ${rows}
   </div>`;
 }
@@ -463,11 +490,7 @@ function renderActionPanel() {
   if (actionMode === "bu" || actionMode === "zhi" || actionMode === "an") {
     body = renderPlayerPicker(`${shortLabel(actionMode)}：谁？`, null, "gang-player");
   } else if (actionMode === "dian") {
-    if (actionPlayer === null) {
-      body = renderPlayerPicker("点杠：谁接的（杠上那人）？", null, "dian-player");
-    } else {
-      body = renderPlayerPicker(`${state.players[actionPlayer]} 点杠：谁点的（放牌那人）？`, actionPlayer, "dian-from");
-    }
+    body = renderDianCombined();
   } else if (actionMode === "hu") {
     if (actionPlayer === null) {
       body = renderHuPickerWithMahu();
@@ -476,6 +499,31 @@ function renderActionPanel() {
     }
   }
   return bar + body;
+}
+
+function renderDianCombined() {
+  const gangBtns = state.players.map((n, i) => {
+    const sel = actionPlayer === i ? "selected" : "";
+    const disabled = gangDianFrom === i ? "disabled" : "";
+    return `<button data-xact="dian-gang-pick" data-pi="${i}" class="${sel}" ${disabled}>${escapeHtml(n)}</button>`;
+  }).join("");
+  const fromBtns = state.players.map((n, i) => {
+    const sel = gangDianFrom === i ? "selected" : "";
+    const disabled = actionPlayer === i ? "disabled" : "";
+    return `<button data-xact="dian-from-pick" data-pi="${i}" class="${sel}" ${disabled}>${escapeHtml(n)}</button>`;
+  }).join("");
+  const canConfirm = actionPlayer !== null && gangDianFrom !== null && actionPlayer !== gangDianFrom;
+  return `<div class="picker-panel">
+    <div class="picker-title">点杠</div>
+    <div class="picker-sublabel">谁接的（杠上那人）</div>
+    <div class="picker-row">${gangBtns}</div>
+    <div class="picker-sublabel">谁点的（放牌那人）</div>
+    <div class="picker-row">${fromBtns}</div>
+    <div class="picker-buttons">
+      <button data-xact="cancel">取消</button>
+      <button data-xact="dian-confirm" class="primary" ${canConfirm ? "" : "disabled"}>确认</button>
+    </div>
+  </div>`;
 }
 
 function renderHuPickerWithMahu() {
@@ -562,13 +610,13 @@ function renderHuForm(i) {
   const genOpts = [];
   for (let g = 0; g <= maxGen; g++) {
     const chk = g === huSel.gen ? "checked" : "";
-    genOpts.push(`<label><input type="radio" name="hgen" value="${g}" ${chk}> ${g} 根</label>`);
+    genOpts.push(`<label class="pill-option"><input type="radio" name="hgen" value="${g}" ${chk}> ${g} 根</label>`);
   }
 
   const bonusInputs = ["gangshang", "qianggang", "haidi"].map(k => {
     const chk = huSel.bonuses.includes(k) ? "checked" : "";
     const dis = noBonus ? "disabled" : "";
-    return `<label><input type="checkbox" data-bonus="${k}" value="${k}" ${chk} ${dis}> ${BONUS_NAMES[k]}</label>`;
+    return `<label class="pill-option pill-check ${dis ? 'disabled' : ''}"><input type="checkbox" data-bonus="${k}" value="${k}" ${chk} ${dis}> ${BONUS_NAMES[k]}</label>`;
   }).join("");
 
   const zimoChk = huSel.zimo === true ? "checked" : "";
@@ -578,7 +626,7 @@ function renderHuForm(i) {
     ? `<label>点炮者</label><div class="player-row">${fromButtons}</div>`
     : "";
   const genSection = maxGen > 0
-    ? `<label>根数</label><div class="radio-row">${genOpts.join("")}</div>`
+    ? `<label>根数</label><div class="pill-row">${genOpts.join("")}</div>`
     : "";
   const preview = computePreview(i);
   const canConfirm = isHuValid(i);
@@ -586,9 +634,9 @@ function renderHuForm(i) {
   return `<div class="picker-panel">
     <div class="picker-title">${state.players[i]} 胡</div>
     <label>方式</label>
-    <div class="radio-row">
-      <label><input type="radio" name="hway" value="zimo" ${zimoChk}> 自摸</label>
-      <label><input type="radio" name="hway" value="dianpao" ${dianpaoChk} ${dianpaoDis}> 点炮</label>
+    <div class="pill-row">
+      <label class="pill-option"><input type="radio" name="hway" value="zimo" ${zimoChk}> 自摸</label>
+      <label class="pill-option ${dianpaoDis ? 'disabled' : ''}"><input type="radio" name="hway" value="dianpao" ${dianpaoChk} ${dianpaoDis}> 点炮</label>
     </div>
     ${fromSection}
     <label>牌型</label>
@@ -598,7 +646,7 @@ function renderHuForm(i) {
     ${hint}
     ${genSection}
     <label>加番</label>
-    <div class="radio-row">${bonusInputs}</div>
+    <div class="pill-row">${bonusInputs}</div>
     <div class="preview">${preview}</div>
     <div class="picker-buttons">
       <button data-xact="cancel">取消</button>
@@ -862,19 +910,6 @@ function handleExpansionButton(xact, btn) {
       renderMain();
       return;
     }
-    if (role === "dian-player") {
-      actionPlayer = pi;
-      renderMain();
-      return;
-    }
-    if (role === "dian-from") {
-      // 点杠第二步：被点者。选完即记录
-      state = addEvent(state, { type: "gang", player: actionPlayer, gangType: "dian", from: pi });
-      saveState(state);
-      resetAction();
-      renderMain();
-      return;
-    }
     if (role === "hu-player") {
       actionPlayer = pi;
       // 自动识别根数：本局已录的、此人做过的杠数量
@@ -895,6 +930,26 @@ function handleExpansionButton(xact, btn) {
       renderMain();
       return;
     }
+  }
+  if (xact === "dian-gang-pick") {
+    actionPlayer = Number(btn.dataset.pi);
+    if (gangDianFrom === actionPlayer) gangDianFrom = null;
+    renderMain();
+    return;
+  }
+  if (xact === "dian-from-pick") {
+    gangDianFrom = Number(btn.dataset.pi);
+    if (actionPlayer === gangDianFrom) actionPlayer = null;
+    renderMain();
+    return;
+  }
+  if (xact === "dian-confirm") {
+    if (actionPlayer === null || gangDianFrom === null || actionPlayer === gangDianFrom) return;
+    state = addEvent(state, { type: "gang", player: actionPlayer, gangType: "dian", from: gangDianFrom });
+    saveState(state);
+    resetAction();
+    renderMain();
+    return;
   }
   if (xact === "hu-from") {
     huSel.from = Number(btn.dataset.fi);
@@ -966,81 +1021,149 @@ function handleExpansionButton(xact, btn) {
     return;
   }
   if (xact === "remove-event") {
+    pushUndo("删除事件");
     state = removeEventAt(state, Number(btn.dataset.idx));
     saveState(state);
     renderMain();
     return;
   }
-  if (xact === "settle-confirm") {
-    const huSet = huSetFromEvents(state.currentRound.events);
-    const result = [];
-    for (let i = 0; i < 4; i++) {
-      if (huSet.has(i)) continue;
-      const s = settleSel[i];
-      if (!s || !s.status) return;
-      const entry = { player: i, kind: s.status };
-      if (s.status === "tingpai") entry.maxFan = s.maxFan || 0;
-      result.push(entry);
-    }
-    state = addEvent(state, { type: "settlement", result });
-    state = endRound(state);
+  if (xact === "move-up") {
+    pushUndo("上移事件");
+    state = moveEventBy(state, Number(btn.dataset.idx), -1);
     saveState(state);
-    settlingMode = false;
-    settleSel = [null, null, null, null];
-    diceRoll = null;
-    resetAction();
     renderMain();
+    return;
+  }
+  if (xact === "move-down") {
+    pushUndo("下移事件");
+    state = moveEventBy(state, Number(btn.dataset.idx), 1);
+    saveState(state);
+    renderMain();
+    return;
+  }
+  if (xact === "undo") {
+    const entry = popUndo();
+    if (entry) {
+      state = entry.state;
+      saveState(state);
+      resetAction();
+      renderMain();
+    }
+    return;
+  }
+  if (xact === "settle-confirm") {
+    debounced("settle-confirm", () => {
+      const huSet = huSetFromEvents(state.currentRound.events);
+      const result = [];
+      for (let i = 0; i < 4; i++) {
+        if (huSet.has(i)) continue;
+        const s = settleSel[i];
+        if (!s || !s.status) return;
+        const entry = { player: i, kind: s.status };
+        if (s.status === "tingpai") entry.maxFan = s.maxFan || 0;
+        result.push(entry);
+      }
+      pushUndo("流局结算");
+      state = addEvent(state, { type: "settlement", result });
+      state = endRound(state);
+      saveState(state);
+      settlingMode = false;
+      settleSel = [null, null, null, null];
+      diceRoll = null;
+      resetAction();
+      renderMain();
+    });
     return;
   }
 }
 
 // 顺序页拖拽（pointer events，同时支持鼠标和触摸）
 let dragState = null;
+
+function clearDragVisuals() {
+  document.querySelectorAll(".reorder-row").forEach(r => {
+    r.classList.remove("dragging", "drop-above", "drop-below");
+    r.style.transform = "";
+  });
+}
+
 $("#main").addEventListener("pointerdown", (e) => {
   const handle = e.target.closest(".reorder-handle");
   if (!handle) return;
   const row = handle.closest(".reorder-row");
   if (!row) return;
   e.preventDefault();
-  dragState = { srcIdx: Number(row.dataset.idx), lastTargetIdx: null };
+  const rect = row.getBoundingClientRect();
+  dragState = {
+    srcIdx: Number(row.dataset.idx),
+    srcEl: row,
+    offsetY: e.clientY - (rect.top + rect.height / 2),
+    targetIdx: null,
+    targetPos: null // "above" | "below"
+  };
   row.classList.add("dragging");
   handle.setPointerCapture(e.pointerId);
 });
+
 $("#main").addEventListener("pointermove", (e) => {
   if (!dragState) return;
+  // 源行跟着光标上下移动
+  const srcRect = dragState.srcEl.getBoundingClientRect();
+  const srcMidOriginal = srcRect.top + srcRect.height / 2 - parseFloat(dragState.srcEl.style.transform.match(/-?\d+/)?.[0] || 0);
+  // 简化：用 clientY 相对位置直接设置 transform
+  const baselineY = dragState.srcEl.offsetTop + dragState.srcEl.offsetHeight / 2;
+  const parentRect = dragState.srcEl.parentElement.getBoundingClientRect();
+  const relY = e.clientY - parentRect.top;
+  const dy = relY - (dragState.srcEl.offsetTop + dragState.srcEl.offsetHeight / 2);
+  dragState.srcEl.style.transform = `translateY(${dy}px)`;
+
+  // 决定目标位置
   const rows = document.querySelectorAll(".reorder-row");
-  let targetIdx = null;
+  let targetIdx = null, targetPos = null;
   for (const r of rows) {
+    if (r === dragState.srcEl) continue;
     const rect = r.getBoundingClientRect();
     if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
       targetIdx = Number(r.dataset.idx);
+      targetPos = (e.clientY < rect.top + rect.height / 2) ? "above" : "below";
       break;
     }
   }
+  dragState.targetIdx = targetIdx;
+  dragState.targetPos = targetPos;
+
+  rows.forEach(r => {
+    r.classList.remove("drop-above", "drop-below");
+  });
   if (targetIdx !== null) {
-    dragState.lastTargetIdx = targetIdx;
-    rows.forEach(r => {
-      const idx = Number(r.dataset.idx);
-      r.classList.toggle("drop-target", idx === targetIdx && idx !== dragState.srcIdx);
-    });
+    const tRow = document.querySelector(`.reorder-row[data-idx="${targetIdx}"]`);
+    if (tRow) tRow.classList.add(targetPos === "above" ? "drop-above" : "drop-below");
   }
 });
+
 $("#main").addEventListener("pointerup", () => {
   if (!dragState) return;
-  document.querySelectorAll(".reorder-row").forEach(r => {
-    r.classList.remove("dragging", "drop-target");
-  });
-  if (dragState.lastTargetIdx !== null && dragState.lastTargetIdx !== dragState.srcIdx) {
-    state = moveEventTo(state, dragState.srcIdx, dragState.lastTargetIdx);
-    saveState(state);
-    renderMain();
+  const { srcIdx, targetIdx, targetPos } = dragState;
+  clearDragVisuals();
+  if (targetIdx !== null && targetIdx !== srcIdx) {
+    // 计算最终位置
+    let destIdx = targetPos === "above" ? targetIdx : targetIdx + 1;
+    // 如果 src < destIdx，删除 src 后 dest 要 -1
+    if (srcIdx < destIdx) destIdx -= 1;
+    if (destIdx !== srcIdx) {
+      pushUndo("拖动事件");
+      state = moveEventTo(state, srcIdx, destIdx);
+      saveState(state);
+      renderMain();
+      dragState = null;
+      return;
+    }
   }
   dragState = null;
 });
+
 $("#main").addEventListener("pointercancel", () => {
-  document.querySelectorAll(".reorder-row").forEach(r => {
-    r.classList.remove("dragging", "drop-target");
-  });
+  clearDragVisuals();
   dragState = null;
 });
 
@@ -1104,6 +1227,7 @@ $("#btn-reset-round").addEventListener("click", () => {
     return;
   }
   if (!confirm("清空本局全部事件，重新开始录入？（往局历史和玩家名保留）")) return;
+  pushUndo("重置本局");
   state = { ...state, currentRound: { events: [] } };
   saveState(state);
   settlingMode = false;
@@ -1113,14 +1237,14 @@ $("#btn-reset-round").addEventListener("click", () => {
   renderMain();
 });
 
-$("#btn-end-round").addEventListener("click", () => {
+$("#btn-end-round").addEventListener("click", () => debounced("end-round", () => {
   if (state.currentRound.events.length === 0) {
     alert("本局还没有任何事件，不能进下一局。");
     return;
   }
   const huSet = huSetFromEvents(state.currentRound.events);
   if (huSet.size >= 4) {
-    // 全员都胡了，直接进下一局
+    pushUndo("下一局");
     state = endRound(state);
     saveState(state);
     diceRoll = null;
@@ -1128,12 +1252,11 @@ $("#btn-end-round").addEventListener("click", () => {
     renderMain();
     return;
   }
-  // 有未胡玩家：进入流局结算，默认全部已听 0番（最常见场景）
   settleSel = state.players.map(() => ({ status: "tingpai", maxFan: 0 }));
   settlingMode = true;
   resetAction();
   renderMain();
-});
+}));
 
 renderRoute();
 

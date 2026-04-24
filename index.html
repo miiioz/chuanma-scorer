@@ -91,15 +91,25 @@
     /* 事件顺序编辑 */
     .reorder-view { display: flex; flex-direction: column; gap: 6px; }
     .reorder-hint { font-size: 12px; color: #888; padding: 4px 8px; background: #fff8e6; border-radius: 4px; line-height: 1.5; border: 1px dashed #e3c653; }
-    .reorder-row { display: flex; align-items: center; gap: 8px; background: #fff; padding: 10px 12px; border-radius: 8px; font-size: 13px; touch-action: none; transition: background 0.15s, transform 0.1s; }
-    .reorder-row.dragging { opacity: 0.5; transform: scale(0.98); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-    .reorder-row.drop-target { background: #e0f2eb; box-shadow: inset 0 0 0 2px #2c7; }
-    .reorder-handle { flex-shrink: 0; width: 28px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #bbb; cursor: grab; user-select: none; letter-spacing: -2px; }
-    .reorder-handle:active { cursor: grabbing; color: #2c7; }
+    .reorder-view { position: relative; }
+    .reorder-row { display: flex; align-items: center; gap: 6px; background: #fff; padding: 10px 12px; border-radius: 8px; font-size: 13px; touch-action: none; position: relative; }
+    .reorder-row.dragging { opacity: 0.85; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 100; background: #e0f8ed; border: 2px solid #2c7; padding: 8px 10px; }
+    /* 粗绿指示线标注 drop 位置 */
+    .reorder-row.drop-above::before,
+    .reorder-row.drop-below::after {
+      content: ""; position: absolute; left: 0; right: 0;
+      height: 4px; background: #2c7; border-radius: 2px;
+      box-shadow: 0 0 8px rgba(44, 119, 85, 0.6);
+    }
+    .reorder-row.drop-above::before { top: -4px; }
+    .reorder-row.drop-below::after { bottom: -4px; }
+    .reorder-handle { flex-shrink: 0; width: 32px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #bbb; cursor: grab; user-select: none; letter-spacing: -2px; touch-action: none; }
+    .reorder-handle:active { cursor: grabbing; color: #2c7; background: #f0faf5; border-radius: 4px; }
     .reorder-idx { color: #999; font-weight: 500; min-width: 22px; }
-    .reorder-desc { flex: 1; color: #333; }
+    .reorder-desc { flex: 1; color: #333; min-width: 0; }
     .reorder-desc b { color: #555; font-weight: 500; }
-    .reorder-row button.reorder-del { padding: 4px 10px; font-size: 14px; color: #c33; border-color: #e8b8b8; min-height: 32px; }
+    .reorder-row button { padding: 4px 8px; font-size: 14px; min-height: 34px; min-width: 32px; flex-shrink: 0; }
+    .reorder-row button.reorder-del { color: #c33; border-color: #e8b8b8; }
     /* 玩家卡片 */
     .player-card { background: #fff; padding: 12px; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 1px rgba(0,0,0,0.02); }
     .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -161,6 +171,7 @@
     .picker-buttons { display: flex; gap: 8px; margin-top: 4px; }
     .picker-buttons button { flex: 1; min-height: 44px; }
     .picker-subsection { font-size: 12px; color: #c44; margin: 10px 0 4px; padding-top: 8px; border-top: 1px dashed #d4c070; }
+    .picker-sublabel { font-size: 12px; color: #888; margin: 6px 0 4px; font-weight: 500; }
     .picker-row.mahu-row button { background: #fff3f0; border-color: #e8b8b0; color: #c44; }
     .picker-row.mahu-row button:hover { background: #fce4df; }
     /* hu form 内复用 */
@@ -189,6 +200,17 @@
       transform: rotate(45deg);
     }
     .radio-row input:disabled { opacity: 0.35; cursor: not-allowed; }
+    /* 药片卡片（方式/根数/加番 统一样式，和牌型一致） */
+    .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+    .pill-option { display: inline-flex !important; align-items: center; gap: 6px; padding: 8px 14px; background: #fff; border-radius: 6px; font-size: 13px; font-weight: 400; cursor: pointer; margin: 0 !important; border: 1px solid #ddd; color: #333; white-space: nowrap; }
+    .pill-option input { display: none; }
+    .pill-option::before { content: ""; width: 14px; height: 14px; border: 2px solid #999; flex-shrink: 0; background: #fff; box-sizing: border-box; }
+    .pill-option:not(.pill-check)::before { border-radius: 50%; }
+    .pill-option.pill-check::before { border-radius: 3px; }
+    .pill-option:has(input:checked) { background: #2c7; color: #fff; border-color: #2c7; font-weight: 500; }
+    .pill-option:not(.pill-check):has(input:checked)::before { background: #fff; border-color: #fff; box-shadow: inset 0 0 0 3px #2c7; }
+    .pill-option.pill-check:has(input:checked)::before { content: "✓"; background: #fff; border-color: #fff; color: #2c7; text-align: center; line-height: 10px; font-size: 11px; font-weight: 700; }
+    .pill-option.disabled { opacity: 0.4; cursor: not-allowed; }
     /* 牌型网格（点选） */
     .pattern-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 4px 0 8px; }
     .pattern-grid label { display: flex; align-items: center; gap: 6px; padding: 8px 6px; background: #fff; border-radius: 6px; font-size: 13px; font-weight: 400; cursor: pointer; margin: 0; border: 1px solid #ddd; color: #333; }
