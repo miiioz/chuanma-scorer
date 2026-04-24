@@ -87,7 +87,7 @@ export function replayEvents(rule, baseScore, events) {
   return scores;
 }
 
-// 流局结算：花猪赔 penalty 给非花猪；未听赔已听 2^maxFan；相公不参与
+// 流局结算：花猪赔 penalty 给非花猪非相公；未听/相公 都赔已听 2^maxFan
 // ev.result: [{player, kind: "huazhu"|"tingpai"|"weiting"|"xianggong", maxFan?}]
 // 胡者不在 result 中
 export function applySettlementEvent(rule, baseScore, scores, event) {
@@ -113,9 +113,9 @@ export function applySettlementEvent(rule, baseScore, scores, event) {
       next[j] += penalty;
     }
   }
-  // 查听：未听赔已听（相公不参与）
+  // 查听：未听+相公 都赔已听
   for (let i = 0; i < 4; i++) {
-    if (roles[i] !== "weiting") continue;
+    if (roles[i] !== "weiting" && roles[i] !== "xianggong") continue;
     for (let j = 0; j < 4; j++) {
       if (roles[j] !== "tingpai") continue;
       const fan = Math.min(maxFanOf[j], rule.capFan);
@@ -147,12 +147,13 @@ export function settlementPairwise(rule, baseScore, event) {
     }
   }
   for (let i = 0; i < 4; i++) {
-    if (roles[i] !== "weiting") continue;
+    if (roles[i] !== "weiting" && roles[i] !== "xianggong") continue;
     for (let j = 0; j < 4; j++) {
       if (roles[j] !== "tingpai") continue;
       const fan = Math.min(maxFanOf[j], rule.capFan);
       const amount = (2 ** fan) * baseScore;
-      pairs.push({ from: i, to: j, amount, kind: "查听" });
+      const kind = roles[i] === "xianggong" ? "相公赔" : "查听";
+      pairs.push({ from: i, to: j, amount, kind });
     }
   }
   return pairs;

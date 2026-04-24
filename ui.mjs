@@ -423,17 +423,19 @@ function renderSettlementPanel() {
     const sel = settleSel[i] || { status: null, maxFan: 0 };
     const btnCls = (k) => sel.status === k ? "selected" : "";
     const hints = FAN_HINTS[state.rule] || {};
-    const fanRow = sel.status === "tingpai"
-      ? `<div class="settle-fan-label">听的最大牌型：</div>
-         <div class="settle-fan-grid">${
-          Array.from({length: rule.capFan + 1}, (_, g) =>
-            `<button data-xact="settle-fan" data-sp="${i}" data-fan="${g}" class="${sel.maxFan === g ? 'selected' : ''}">
-              <div class="fan-num">${g}番</div>
-              <div class="fan-hint">${hints[g] || ""}</div>
-            </button>`
-          ).join("")
-        }</div>`
-      : "";
+    const hasLoser = settleSel.some(s => s?.status === "weiting" || s?.status === "xianggong");
+    let fanRow = "";
+    if (sel.status === "tingpai" && hasLoser) {
+      fanRow = `<div class="settle-fan-label">听的最大牌型：</div>
+        <div class="settle-fan-grid">${
+        Array.from({length: rule.capFan + 1}, (_, g) =>
+          `<button data-xact="settle-fan" data-sp="${i}" data-fan="${g}" class="${sel.maxFan === g ? 'selected' : ''}">
+            <div class="fan-num">${g}番</div>
+            <div class="fan-hint">${hints[g] || ""}</div>
+          </button>`
+        ).join("")
+      }</div>`;
+    }
     rows.push(`<div class="settle-row">
       <span class="settle-name">${escapeHtml(state.players[i])}</span>
       <div class="settle-status-row">
@@ -491,7 +493,8 @@ function renderSettlementPanel() {
   }
 
   return `<div class="picker-panel">
-    <div class="picker-title">流局结算 · 默认全部已听 0番，有花猪/未听再改</div>
+    <div class="picker-title">流局结算</div>
+    <div class="settle-sub">默认全部已听 0番，有花猪 / 未听 / 相公再改。<br>有未听或相公时才需要选"听的最大牌型"。</div>
     ${rows.join("")}
     ${preview}
     <div class="picker-buttons">
@@ -1264,10 +1267,21 @@ $("#main").addEventListener("change", (e) => {
 
 // ---------- Footer ----------
 $("#btn-new-session").addEventListener("click", () => {
-  if (!confirm("确认开新场？当前场进度将丢失（M1 暂不保存历史）。")) return;
+  const n = state?.rounds?.length ?? 0;
+  const hasCurrent = state?.currentRound?.events?.length > 0;
+  let msg;
+  if (n === 0 && !hasCurrent) {
+    msg = "确认开新场？将重置玩家和规则，回到向导页。";
+  } else {
+    const parts = [];
+    if (n > 0) parts.push(`已完成 ${n} 局`);
+    if (hasCurrent) parts.push(`当前局 ${state.currentRound.events.length} 条事件`);
+    msg = `确认开新场？当前场（${parts.join("、")}）的全部数据将删除，无法恢复。`;
+  }
+  if (!confirm(msg)) return;
   state = null;
   localStorage.removeItem("chuanma.state");
-  [0, 1, 2, 3].forEach(i => $("#p" + i).value = `玩家${i+1}`);
+  [0, 1, 2, 3].forEach(i => $("#p" + i).value = "");
   resetAction();
   renderRoute();
 });
