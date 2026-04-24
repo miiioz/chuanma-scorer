@@ -1,5 +1,5 @@
 import { RULES, BONUS_NAMES } from "./rules.mjs";
-import { loadState, saveState, newSession, addEvent, removeEventAt, moveEventBy, endRound, currentRoundScores, totalScores } from "./state.mjs";
+import { loadState, saveState, newSession, addEvent, removeEventAt, moveEventBy, moveEventTo, endRound, currentRoundScores, totalScores } from "./state.mjs";
 import { computeFan, computeScore, replayPairwise, netPayments, eventPairwise, settlementPairwise } from "./engine.mjs";
 
 let state = loadState();
@@ -225,18 +225,15 @@ function renderReorderView() {
     } else if (ev.type === "mahu") {
       desc = `<b>${p[ev.player]}</b> ⚠️ 麻胡 赔 3 家`;
     }
-    const upDisabled = idx === 0 ? "disabled" : "";
-    const downDisabled = idx === events.length - 1 ? "disabled" : "";
-    return `<div class="reorder-row">
+    return `<div class="reorder-row" data-idx="${idx}">
+      <span class="reorder-handle" data-drag="${idx}">⋮⋮</span>
       <span class="reorder-idx">${idx + 1}.</span>
       <span class="reorder-desc">${desc}</span>
-      <button data-xact="move-up" data-idx="${idx}" ${upDisabled}>↑</button>
-      <button data-xact="move-down" data-idx="${idx}" ${downDisabled}>↓</button>
       <button data-xact="remove-event" data-idx="${idx}" class="reorder-del">✕</button>
     </div>`;
   }).join("");
   return `<div class="reorder-view">
-    <div class="reorder-hint">按实际发生顺序调整。点 ↑↓ 移动，✕ 删除。分数会实时重算。</div>
+    <div class="reorder-hint">按实际发生顺序调整。<b>长按左侧 ⋮⋮ 拖动</b>排序，✕ 删除。</div>
     ${rows}
   </div>`;
 }
@@ -968,18 +965,6 @@ function handleExpansionButton(xact, btn) {
     renderMain();
     return;
   }
-  if (xact === "move-up") {
-    state = moveEventBy(state, Number(btn.dataset.idx), -1);
-    saveState(state);
-    renderMain();
-    return;
-  }
-  if (xact === "move-down") {
-    state = moveEventBy(state, Number(btn.dataset.idx), 1);
-    saveState(state);
-    renderMain();
-    return;
-  }
   if (xact === "remove-event") {
     state = removeEventAt(state, Number(btn.dataset.idx));
     saveState(state);
@@ -1008,6 +993,56 @@ function handleExpansionButton(xact, btn) {
     return;
   }
 }
+
+// 顺序页拖拽（pointer events，同时支持鼠标和触摸）
+let dragState = null;
+$("#main").addEventListener("pointerdown", (e) => {
+  const handle = e.target.closest(".reorder-handle");
+  if (!handle) return;
+  const row = handle.closest(".reorder-row");
+  if (!row) return;
+  e.preventDefault();
+  dragState = { srcIdx: Number(row.dataset.idx), lastTargetIdx: null };
+  row.classList.add("dragging");
+  handle.setPointerCapture(e.pointerId);
+});
+$("#main").addEventListener("pointermove", (e) => {
+  if (!dragState) return;
+  const rows = document.querySelectorAll(".reorder-row");
+  let targetIdx = null;
+  for (const r of rows) {
+    const rect = r.getBoundingClientRect();
+    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      targetIdx = Number(r.dataset.idx);
+      break;
+    }
+  }
+  if (targetIdx !== null) {
+    dragState.lastTargetIdx = targetIdx;
+    rows.forEach(r => {
+      const idx = Number(r.dataset.idx);
+      r.classList.toggle("drop-target", idx === targetIdx && idx !== dragState.srcIdx);
+    });
+  }
+});
+$("#main").addEventListener("pointerup", () => {
+  if (!dragState) return;
+  document.querySelectorAll(".reorder-row").forEach(r => {
+    r.classList.remove("dragging", "drop-target");
+  });
+  if (dragState.lastTargetIdx !== null && dragState.lastTargetIdx !== dragState.srcIdx) {
+    state = moveEventTo(state, dragState.srcIdx, dragState.lastTargetIdx);
+    saveState(state);
+    renderMain();
+  }
+  dragState = null;
+});
+$("#main").addEventListener("pointercancel", () => {
+  document.querySelectorAll(".reorder-row").forEach(r => {
+    r.classList.remove("dragging", "drop-target");
+  });
+  dragState = null;
+});
 
 // <details> 折叠状态追踪（toggle 事件不冒泡，需捕获阶段）
 $("#main").addEventListener("toggle", (e) => {

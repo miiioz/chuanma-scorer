@@ -59,6 +59,19 @@ export function moveEventBy(state, index, delta) {
   };
 }
 
+export function moveEventTo(state, fromIdx, toIdx) {
+  if (fromIdx === toIdx) return state;
+  const events = state.currentRound.events.slice();
+  if (fromIdx < 0 || fromIdx >= events.length) return state;
+  if (toIdx < 0 || toIdx >= events.length) return state;
+  const [moved] = events.splice(fromIdx, 1);
+  events.splice(toIdx, 0, moved);
+  return {
+    ...state,
+    currentRound: { ...state.currentRound, events }
+  };
+}
+
 export function endRound(state) {
   const rule = RULES[state.rule];
   const delta = replayEvents(rule, state.baseScore, state.currentRound.events);
