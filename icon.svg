@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2e8871"/>
+      <stop offset="100%" stop-color="#246655"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <rect x="110" y="96" width="292" height="320" rx="36" fill="#f5f0e0" stroke="#2a5048" stroke-width="8"/>
+  <text x="256" y="345" font-size="240" text-anchor="middle" fill="#c22" font-family="'PingFang SC', 'Noto Sans CJK SC', sans-serif" font-weight="bold">中</text>
+</svg>
