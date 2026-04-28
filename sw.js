@@ -1,5 +1,5 @@
 // 川麻记分 Service Worker — 离线缓存
-const CACHE_NAME = 'chuanma-v27';
+const CACHE_NAME = 'chuanma-v28';
 const ASSETS = [
   './',
   './index.html',

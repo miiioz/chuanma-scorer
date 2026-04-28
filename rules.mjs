@@ -5,7 +5,7 @@ export const RULES = {
     capFan: 5,
     capScore: 32,
     penalty: 32,
-    gangPoint: { bu: 1, dian: 2, an: 2, zhi: 2 },
+    gangPoint: { bu: 1, dian: 2, an: 2 },
     patternFan: {
       pinghu:           [0, 1, 2],
       dadui:            [1, 2, 3],
@@ -47,7 +47,7 @@ export const RULES = {
     capFan: 4,
     capScore: 16,
     penalty: 16,
-    gangPoint: { bu: 1, dian: 2, an: 2, zhi: 2 },
+    gangPoint: { bu: 1, dian: 2, an: 2 },
     // patternId → [gen0番, gen1番, gen2番]
     patternFan: {
       pinghu:         [0, 1, 2],

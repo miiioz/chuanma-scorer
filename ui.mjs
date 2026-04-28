@@ -3,7 +3,7 @@ import { loadState, saveState, newSession, addEvent, removeEventAt, moveEventBy,
 import { computeFan, computeScore, replayPairwise, netPayments, eventPairwise, settlementPairwise } from "./engine.mjs";
 
 let state = loadState();
-let actionMode = null;         // null | "bu" | "zhi" | "an" | "dian" | "hu"
+let actionMode = null;         // null | "bu" | "an" | "dian" | "hu"
 let actionPlayer = null;       // 选定的动作主角 (0..3)，杠=杠者，胡=胡者
 let gangDianFrom = null;       // 点杠第二步：被点者
 let huSel = defaultHuSel();
@@ -166,7 +166,7 @@ function describeHistoryEvent(ev) {
     return `<b>${p[ev.player]}</b> ⚠️ 麻胡 赔 3 家各 ${penalty}元`;
   }
   if (ev.type === "gang") {
-    const types = { bu: "补杠", dian: "点杠", an: "暗杠", zhi: "直杠" };
+    const types = { bu: "补杠", dian: "点杠", an: "暗杠" };
     const unit = rule.gangPoint[ev.gangType] * state.baseScore;
     if (ev.gangType === "dian") return `<b>${p[ev.player]}</b> ${types[ev.gangType]} (${p[ev.from]}点) 收 ${unit}元`;
     return `<b>${p[ev.player]}</b> ${types[ev.gangType]} 每家 ${unit}元`;
@@ -217,10 +217,9 @@ function renderHelp() {
       <h4>⚡ 打断顺序的操作</h4>
       <p>• <b>碰</b>：别人打的牌你手上有一对 → 接走变刻子，由你出下一张</p>
       <p>• <b>杠</b>：</p>
-      <p class="help-sub">- 直杠（明杠）：别人打的牌你手上已有三张相同</p>
-      <p class="help-sub">- 补杠：你碰过的刻子 + 摸到第 4 张相同</p>
-      <p class="help-sub">- 暗杠：你自己摸齐 4 张相同</p>
-      <p class="help-sub">- 点杠（川麻特有）：别人打的牌你手上已有三张相同 = 直杠另一叫法</p>
+      <p class="help-sub">- 点杠：别人打的牌你手上已有三张相同；只那一家付分</p>
+      <p class="help-sub">- 补杠：你碰过的刻子 + 摸到第 4 张相同；3 家各付</p>
+      <p class="help-sub">- 明杠/暗杠：你自己摸齐 4 张相同（川麻里牌也明摆）；3 家各付</p>
       <p>• 杠之后要<b>再摸一张</b>（从牌墙尾摸），再出一张</p>
       <p>• <b>胡</b>：</p>
       <p class="help-sub">- 点炮胡：别人打的牌能让你胡</p>
@@ -265,7 +264,7 @@ function renderReorderView() {
   const rows = events.map((ev, idx) => {
     let desc = "";
     if (ev.type === "gang") {
-      const types = { bu: "补杠", dian: "点杠", an: "暗杠", zhi: "直杠" };
+      const types = { bu: "补杠", dian: "点杠", an: "暗杠" };
       desc = `<b>${p[ev.player]}</b> ${types[ev.gangType]}${ev.from !== null && ev.from !== undefined ? `（${p[ev.from]}点）` : ""}`;
     } else if (ev.type === "hu") {
       const rule = RULES[state.rule];
@@ -513,13 +512,12 @@ function renderActionPanel() {
   const bar = `<div class="global-actions">
     ${btn("bu",   "补杠")}
     ${btn("dian", "点杠")}
-    ${btn("zhi",  "直杠")}
     ${btn("an",   "暗杠")}
     ${btn("hu",   "胡", "hu-btn")}
   </div>`;
 
   let body = "";
-  if (actionMode === "bu" || actionMode === "zhi" || actionMode === "an") {
+  if (actionMode === "bu" || actionMode === "an") {
     body = renderPlayerPicker(`${shortLabel(actionMode)}：谁？`, null, "gang-player");
   } else if (actionMode === "dian") {
     body = renderDianCombined();
@@ -579,7 +577,7 @@ function renderHuPickerWithMahu() {
 }
 
 function shortLabel(act) {
-  return { bu: "补杠", zhi: "直杠", an: "暗杠", dian: "点杠", hu: "胡" }[act] || act;
+  return { bu: "补杠", an: "暗杠", dian: "点杠", hu: "胡" }[act] || act;
 }
 
 function renderPlayerPicker(title, excludeIdx, role) {
@@ -731,7 +729,7 @@ function eventShortLabel(ev) {
   if (ev.type === "hu") return ev.zimo ? "自摸" : "点炮";
   if (ev.type === "settlement") return "结算";
   if (ev.type === "mahu") return "麻胡";
-  const map = { bu: "补杠", dian: "点杠", an: "暗杠", zhi: "直杠" };
+  const map = { bu: "补杠", dian: "点杠", an: "暗杠" };
   return map[ev.gangType] || "杠";
 }
 
@@ -840,7 +838,7 @@ function describeEvent(ev) {
     return `⚠️ 麻胡 → 赔 3 家每人 ${penalty} 元`;
   }
   if (ev.type === "gang") {
-    const types = { bu: "补杠", dian: "点杠", an: "暗杠", zhi: "直杠" };
+    const types = { bu: "补杠", dian: "点杠", an: "暗杠" };
     const unit = rule.gangPoint[ev.gangType] * state.baseScore;
     if (ev.gangType === "dian") return `${types[ev.gangType]}（${p[ev.from]}点）→ 收 ${unit} 元`;
     return `${types[ev.gangType]} → 每家 ${unit} 元`;
@@ -938,8 +936,8 @@ function handleExpansionButton(xact, btn) {
     const role = btn.dataset.role;
     const pi = Number(btn.dataset.pi);
     if (role === "gang-player") {
-      // 补/直/暗杠：选完玩家即记录
-      const labels = { bu: "补杠", zhi: "直杠", an: "暗杠" };
+      // 补杠/暗杠：选完玩家即记录
+      const labels = { bu: "补杠", an: "暗杠" };
       state = addEvent(state, { type: "gang", player: pi, gangType: actionMode, from: null });
       saveState(state);
       toast(`${state.players[pi]} ${labels[actionMode]}`);
